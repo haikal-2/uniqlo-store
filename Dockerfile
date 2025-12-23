@@ -1,6 +1,8 @@
 FROM php:8.2-apache
 
-# Install system dependencies
+# ===============================
+# SYSTEM DEPENDENCIES
+# ===============================
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libjpeg-dev \
@@ -10,35 +12,57 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     libonig-dev \
-    libxml2-dev
+    libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Enable Apache rewrite
+# ===============================
+# FORCE SINGLE MPM (CRITICAL FIX)
+# ===============================
+RUN rm -f /etc/apache2/mods-enabled/mpm_event.load \
+          /etc/apache2/mods-enabled/mpm_worker.load || true
+
+RUN ln -sf /etc/apache2/mods-available/mpm_prefork.load \
+           /etc/apache2/mods-enabled/mpm_prefork.load
+
+# ===============================
+# APACHE CONFIG
+# ===============================
 RUN a2enmod rewrite
 
-# Disable other MPMs, enable prefork only
-RUN a2dismod mpm_event mpm_worker || true
-RUN a2enmod mpm_prefork
+# ===============================
+# PHP EXTENSIONS
+# ===============================
+RUN docker-php-ext-install \
+    pdo \
+    pdo_mysql \
+    mbstring \
+    exif \
+    pcntl \
+    bcmath \
+    gd
 
-# Install PHP extensions
-RUN docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd
-
-# Set working directory
+# ===============================
+# APP SETUP
+# ===============================
 WORKDIR /var/www/html
-
-# Copy project
 COPY . .
 
-# Set Apache document root to public
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
-RUN sed -ri 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
-RUN sed -ri 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
-# Install Composer
+RUN sed -ri 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
+    /etc/apache2/sites-available/*.conf \
+    /etc/apache2/apache2.conf
+
+# ===============================
+# COMPOSER
+# ===============================
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 RUN composer install --no-dev --optimize-autoloader
 
-# Permission
-RUN chown -R www-data:www-data storage bootstrap/cache
-RUN chmod -R 775 storage bootstrap/cache
+# ===============================
+# PERMISSIONS
+# ===============================
+RUN chown -R www-data:www-data /var/www/html \
+ && chmod -R 775 storage bootstrap/cache
 
 EXPOSE 80
