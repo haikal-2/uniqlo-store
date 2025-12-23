@@ -54,3 +54,8 @@ RUN chown -R www-data:www-data /var/www/html \
 EXPOSE 80
 
 CMD service nginx start && php-fpm
+
+CMD php artisan config:clear && \
+    php artisan route:clear && \
+    php artisan view:clear && \
+    service nginx start && php-fpm
